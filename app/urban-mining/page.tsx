@@ -4,10 +4,7 @@ import { Navigation } from "@/components/navigation"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
-  Truck,
   Package,
-  Shield,
-  Recycle,
   CheckCircle,
   Clock,
   MapPin,
@@ -20,7 +17,7 @@ import {
   Leaf,
   TrendingUp,
 } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 interface Asset {
   id: string
@@ -36,57 +33,17 @@ interface Asset {
     silver: number
     palladium: number
     copper: number
-  }
+  } | null
 }
 
-const mockAssets: Asset[] = [
-  {
-    id: "AST-001",
-    type: "server",
-    model: "Dell PowerEdge R740",
-    serial: "SRV-2024-XK7891",
-    status: "complete",
-    location: "New York, NY",
-    pickupDate: "2024-01-15",
-    completedDate: "2024-01-22",
-    materials: { gold: 0.34, silver: 2.1, palladium: 0.12, copper: 145 },
-  },
-  {
-    id: "AST-002",
-    type: "storage",
-    model: "NetApp FAS8200",
-    serial: "NAS-2023-RT4521",
-    status: "recovering",
-    location: "San Francisco, CA",
-    pickupDate: "2024-01-18",
-  },
-  {
-    id: "AST-003",
-    type: "desktop",
-    model: "HP EliteDesk 800 G6",
-    serial: "DKT-2024-PQ1234",
-    status: "sanitizing",
-    location: "Chicago, IL",
-    pickupDate: "2024-01-20",
-  },
-  {
-    id: "AST-004",
-    type: "laptop",
-    model: "Lenovo ThinkPad X1",
-    serial: "LPT-2024-MN5678",
-    status: "in_transit",
-    location: "Boston, MA",
-    pickupDate: "2024-01-22",
-  },
-  {
-    id: "AST-005",
-    type: "network",
-    model: "Cisco Catalyst 9300",
-    serial: "NET-2024-ZX9012",
-    status: "pending_pickup",
-    location: "Seattle, WA",
-  },
-]
+interface Stats {
+  total: number
+  inProgress: number
+  completed: number
+  eWasteDiverted: number
+  goldRecovered: number
+  co2Offset: number
+}
 
 const statusConfig = {
   pending_pickup: { label: "PENDING PICKUP", color: "text-muted-foreground", bg: "bg-secondary" },
@@ -105,18 +62,116 @@ const typeIcons = {
 }
 
 export default function UrbanMiningPage() {
+  const [assets, setAssets] = useState<Asset[]>([])
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null)
   const [filter, setFilter] = useState<Asset["status"] | "all">("all")
+  const [loading, setLoading] = useState(true)
 
-  const filteredAssets = filter === "all" ? mockAssets : mockAssets.filter((a) => a.status === filter)
+  const [stats, setStats] = useState<Stats>({
+    total: 0,
+    inProgress: 0,
+    completed: 0,
+    eWasteDiverted: 0,
+    goldRecovered: 0,
+    co2Offset: 0,
+  })
 
-  const stats = {
-    total: mockAssets.length,
-    inProgress: mockAssets.filter((a) => !["complete", "pending_pickup"].includes(a.status)).length,
-    completed: mockAssets.filter((a) => a.status === "complete").length,
-    eWasteDiverted: 847.5,
-    goldRecovered: mockAssets.reduce((acc, a) => acc + (a.materials?.gold || 0), 0),
-    co2Offset: 2.4,
+  const fetchAssets = async () => {
+    try {
+      const res = await fetch("/api/assets", {
+        method: "GET",
+        cache: "no-store",
+      })
+
+      if (!res.ok) {
+        throw new Error("Failed to fetch assets")
+      }
+
+      const data = await res.json()
+      setAssets(data)
+    } catch (error) {
+      console.error("Error fetching assets:", error)
+    }
+  }
+
+  const fetchStats = async () => {
+    try {
+      const res = await fetch("/api/stats", {
+        method: "GET",
+        cache: "no-store",
+      })
+
+      if (!res.ok) {
+        throw new Error("Failed to fetch stats")
+      }
+
+      const data = await res.json()
+      setStats(data)
+    } catch (error) {
+      console.error("Error fetching stats:", error)
+    }
+  }
+
+  const fetchAllData = async () => {
+    try {
+      setLoading(true)
+      await Promise.all([fetchAssets(), fetchStats()])
+    } catch (error) {
+      console.error("Error fetching data:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchAllData()
+  }, [])
+
+  const filteredAssets =
+    filter === "all" ? assets : assets.filter((a) => a.status === filter)
+
+  const handleSchedulePickup = async () => {
+    try {
+      const newAsset = {
+        type: "server",
+        model: "Dell PowerEdge R750",
+        serial: `SRV-${Date.now()}`,
+        status: "pending_pickup",
+        location: "Delhi, IN",
+        pickupDate: new Date().toISOString().split("T")[0],
+      }
+
+      const res = await fetch("/api/assets", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newAsset),
+      })
+
+      if (!res.ok) {
+        throw new Error("Failed to create asset")
+      }
+
+      await fetchAllData()
+    } catch (error) {
+      console.error("Error scheduling pickup:", error)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background noise-overlay">
+        <Navigation />
+        <main className="pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl">
+            <div className="border border-border/50 rounded-xl bg-card/30 backdrop-blur-sm p-8 text-center">
+              <p className="font-mono text-sm text-muted-foreground">Loading urban mining data...</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    )
   }
 
   return (
@@ -139,7 +194,10 @@ export default function UrbanMiningPage() {
                 Hardware logistics, forensic sanitization, and precious metal recovery.
               </p>
             </div>
-            <Button className="font-mono text-sm tracking-wider bg-primary hover:bg-primary/90 text-primary-foreground">
+            <Button
+              onClick={handleSchedulePickup}
+              className="font-mono text-sm tracking-wider bg-primary hover:bg-primary/90 text-primary-foreground"
+            >
               <Plus className="h-4 w-4 mr-2" />
               SCHEDULE PICKUP
             </Button>
@@ -310,7 +368,7 @@ export default function UrbanMiningPage() {
                       <p className="font-mono text-xs text-muted-foreground mb-3">PROGRESS</p>
                       <div className="space-y-3">
                         {(["pending_pickup", "in_transit", "sanitizing", "recovering", "complete"] as const).map(
-                          (step, i) => {
+                          (step) => {
                             const stepIndex = [
                               "pending_pickup",
                               "in_transit",
@@ -318,6 +376,7 @@ export default function UrbanMiningPage() {
                               "recovering",
                               "complete",
                             ].indexOf(selectedAsset.status)
+
                             const currentStepIndex = [
                               "pending_pickup",
                               "in_transit",
@@ -325,6 +384,7 @@ export default function UrbanMiningPage() {
                               "recovering",
                               "complete",
                             ].indexOf(step)
+
                             const isComplete = currentStepIndex < stepIndex
                             const isCurrent = currentStepIndex === stepIndex
 
