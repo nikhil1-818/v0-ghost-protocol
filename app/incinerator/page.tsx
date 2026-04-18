@@ -1,6 +1,6 @@
 "use client"
 
-import { Upload } from "lucide-react"
+import { Upload, RefreshCw, CheckCircle, FileWarning } from "lucide-react"
 import { useState, useCallback, useEffect } from "react"
 
 interface FileItem {
@@ -15,24 +15,20 @@ export default function IncineratorPage() {
   const [isDragging, setIsDragging] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
 
-  // 🔹 FETCH FILES FROM BACKEND
+  // ✅ FETCH FILES
   useEffect(() => {
     async function fetchFiles() {
-      try {
-        const res = await fetch("http://localhost:5000/api/incinerator")
-        const data = await res.json()
+      const res = await fetch("http://localhost:5000/api/incinerator")
+      const data = await res.json()
 
-        setFiles(
-          data.map((f: any) => ({
-            id: f._id,
-            name: f.filename,
-            size: f.size,
-            status: f.status,
-          }))
-        )
-      } catch (err) {
-        console.log("Fetch error:", err)
-      }
+      setFiles(
+        data.map((f: any) => ({
+          id: f._id,
+          name: f.filename,
+          size: f.size,
+          status: f.status,
+        }))
+      )
     }
 
     fetchFiles()
@@ -62,7 +58,7 @@ export default function IncineratorPage() {
     addFilesToQueue(selectedFiles)
   }
 
-  // 🔹 UPLOAD FILE
+  // ✅ UPLOAD
   async function addFilesToQueue(newFiles: File[]) {
     for (let file of newFiles) {
       const formData = new FormData()
@@ -87,7 +83,7 @@ export default function IncineratorPage() {
     }
   }
 
-  // 🔹 PROCESS FILE
+  // ✅ PROCESS
   async function initiateGhosting() {
     setIsProcessing(true)
 
@@ -112,16 +108,19 @@ export default function IncineratorPage() {
   }
 
   return (
-    <div className="min-h-screen p-6 space-y-6">
+    <div className="min-h-screen bg-black text-white p-6">
 
-      {/* 🔥 DROP ZONE FIXED */}
+      {/* 🔥 HEADER */}
+      <h1 className="text-3xl font-bold mb-6">Digital Incinerator</h1>
+
+      {/* 🔥 DROP ZONE (FIXED) */}
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={() => document.getElementById("fileInput")?.click()}
-        className={`border-2 border-dashed p-10 text-center rounded-xl cursor-pointer ${
-          isDragging ? "border-blue-500 bg-blue-100" : ""
+        className={`border-2 border-dashed rounded-xl p-12 text-center transition cursor-pointer ${
+          isDragging ? "border-green-400 bg-green-900/20" : "border-gray-600"
         }`}
       >
         <input
@@ -132,25 +131,38 @@ export default function IncineratorPage() {
           className="hidden"
         />
 
-        <Upload className="mx-auto mb-4" />
-        <p className="text-lg font-medium">Click or Drop files</p>
+        <Upload className="mx-auto mb-4 w-10 h-10 text-green-400" />
+        <p className="text-lg font-semibold">Drop files to incinerate</p>
+        <p className="text-sm text-gray-400">or click to browse</p>
       </div>
 
       {/* 📁 FILE LIST */}
-      {files.map((file) => (
-        <div key={file.id} className="border p-3 rounded flex justify-between">
-          <span>{file.name}</span>
-          <span>{file.status}</span>
-        </div>
-      ))}
+      <div className="mt-6 space-y-3">
+        {files.map((file) => (
+          <div
+            key={file.id}
+            className="flex items-center justify-between border border-gray-700 rounded-lg p-3"
+          >
+            <div className="flex items-center gap-3">
+              {file.status === "pending" && <FileWarning />}
+              {file.status === "processing" && <RefreshCw className="animate-spin" />}
+              {file.status === "destroyed" && <CheckCircle className="text-green-400" />}
+
+              <span>{file.name}</span>
+            </div>
+
+            <span className="text-sm text-gray-400">{file.status}</span>
+          </div>
+        ))}
+      </div>
 
       {/* 🚀 BUTTON */}
       <button
         onClick={initiateGhosting}
         disabled={isProcessing}
-        className="px-4 py-2 bg-red-500 text-white rounded"
+        className="mt-6 w-full bg-red-600 hover:bg-red-700 py-3 rounded font-bold"
       >
-        {isProcessing ? "Processing..." : "Start Ghosting"}
+        {isProcessing ? "Processing..." : "INITIATE GHOST PROTOCOL"}
       </button>
 
     </div>
