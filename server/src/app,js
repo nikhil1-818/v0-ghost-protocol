@@ -1,0 +1,64 @@
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const cookieParser = require('cookie-parser');
+const passport = require('passport');
+const rateLimit = require('express-rate-limit');
+
+const connectDB = require('./config/db');
+const { errorHandler, notFound } = require('./middleware/errorMiddleware');
+require('./config/passport');
+
+// Load env
+require('dotenv').config();
+
+const app = express();
+
+// Connect to MongoDB
+connectDB();
+
+// Security headers
+app.use(helmet());
+
+// CORS
+app.use(cors({
+  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  credentials: true,
+}));
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,
+  message: { success: false, message: 'Too many requests, please try again later.' },
+});
+app.use('/api', limiter);
+
+// Body parsers
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+
+// Logging (dev only)
+if (process.env.NODE_ENV === 'development') {
+  app.use(morgan('dev'));
+}
+
+// Passport initialize (for OAuth)
+app.use(passport.initialize());
+
+// ─── Routes ──────────────────────────────────────────────────────────────────
+app.use('/api/auth', require('./routes/auth.routes'));
+app.use('/api/home', require('./routes/home.routes'));
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ success: true, message: 'Ghost Protocol API is running 👻' });
+});
+
+// Error handling
+app.use(notFound);
+app.use(errorHandler);
+
+module.exports = app;
