@@ -1,289 +1,550 @@
 "use client"
 
-import { Navigation } from "@/components/navigation"
-import { TerminalText } from "@/components/terminal-text"
-import { Button } from "@/components/ui/button"
-import { Shield, Zap, Database, Lock, ArrowRight, Server, Cpu, HardDrive } from "lucide-react"
-import Link from "next/link"
-import { useState, useEffect } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import {
+  Activity,
+  ArrowRight,
+  Cpu,
+  Database,
+  Loader2,
+  MapPin,
+  Package,
+  RefreshCw,
+  Recycle,
+  ShieldCheck,
+  Trash2,
+  Truck,
+} from "lucide-react"
 
-export default function HomePage() {
-  const [systemTime, setSystemTime] = useState("")
-  const [isClient, setIsClient] = useState(false)
+import { Button } from "@/components/ui/button"
+import { Navigation } from "@/components/navigation"
+import { getAssets, createAsset, deleteAsset } from "@/lib/api/assets"
+import { getStats } from "@/lib/api/stats"
+
+type Asset = {
+  id: string
+  type: "server" | "desktop" | "laptop" | "storage" | "network"
+  model: string
+  serial: string
+  status:
+    | "pending_pickup"
+    | "in_transit"
+    | "sanitizing"
+    | "recovering"
+    | "complete"
+  location: string
+  pickupDate?: string | null
+  completedDate?: string | null
+  materials?: {
+    gold?: number
+    silver?: number
+    palladium?: number
+    copper?: number
+  } | null
+  createdAt?: string
+}
+
+type Stats = {
+  totalAssets: number
+  completedAssets: number
+  pendingAssets: number
+  inTransitAssets: number
+  sanitizingAssets: number
+  recoveringAssets: number
+  goldRecovered: number
+}
+
+const statusOptions = [
+  { label: "All", value: "all" },
+  { label: "Pending", value: "pending_pickup" },
+  { label: "Transit", value: "in_transit" },
+  { label: "Sanitizing", value: "sanitizing" },
+  { label: "Recovering", value: "recovering" },
+  { label: "Complete", value: "complete" },
+]
+
+const statusLabelMap: Record<string, string> = {
+  pending_pickup: "Pending Pickup",
+  in_transit: "In Transit",
+  sanitizing: "Sanitizing",
+  recovering: "Recovering",
+  complete: "Complete",
+}
+
+function getStatusClasses(status: string) {
+  switch (status) {
+    case "complete":
+      return "border-primary/30 bg-primary/10 text-primary"
+    case "recovering":
+      return "border-blue-500/30 bg-blue-500/10 text-blue-400"
+    case "sanitizing":
+      return "border-yellow-500/30 bg-yellow-500/10 text-yellow-400"
+    case "in_transit":
+      return "border-orange-500/30 bg-orange-500/10 text-orange-400"
+    default:
+      return "border-border/60 bg-secondary text-muted-foreground"
+  }
+}
+
+function getTypeIcon(type: Asset["type"]) {
+  switch (type) {
+    case "server":
+      return <Database className="h-4 w-4" />
+    case "desktop":
+      return <Cpu className="h-4 w-4" />
+    case "laptop":
+      return <Cpu className="h-4 w-4" />
+    case "storage":
+      return <Package className="h-4 w-4" />
+    case "network":
+      return <Activity className="h-4 w-4" />
+    default:
+      return <Package className="h-4 w-4" />
+  }
+}
+
+export default function UrbanMiningPage() {
+  const [assets, setAssets] = useState<Asset[]>([])
+  const [stats, setStats] = useState<Stats | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [error, setError] = useState("")
+  const [filter, setFilter] = useState("all")
+
+  async function loadDashboard(selectedFilter = filter, showRefresh = false) {
+    try {
+      setError("")
+      if (showRefresh) {
+        setRefreshing(true)
+      } else {
+        setLoading(true)
+      }
+
+      const [assetsData, statsData] = await Promise.all([
+        getAssets(selectedFilter),
+        getStats(),
+      ])
+
+      setAssets(assetsData)
+      setStats(statsData)
+    } catch (err) {
+      setError("Failed to load dashboard data.")
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
 
   useEffect(() => {
-    setIsClient(true)
-    const updateTime = () => {
-      setSystemTime(new Date().toISOString().replace("T", " ").slice(0, 19))
-    }
-    updateTime()
-    const interval = setInterval(updateTime, 1000)
-    return () => clearInterval(interval)
+    loadDashboard()
   }, [])
 
+  useEffect(() => {
+    loadDashboard(filter, true)
+  }, [filter])
+
+  async function handleCreateDemoAsset() {
+    try {
+      setCreating(true)
+
+      const serial = `SRV-${Date.now()}`
+      await createAsset({
+        type: "server",
+        model: "Dell PowerEdge R760",
+        serial,
+        location: "Delhi, IN",
+        status: "pending_pickup",
+        pickupDate: new Date().toISOString().split("T")[0],
+      })
+
+      await loadDashboard(filter, true)
+    } catch (err) {
+      setError("Failed to create asset.")
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  async function handleDelete(id: string) {
+    try {
+      setDeletingId(id)
+      await deleteAsset(id)
+      await loadDashboard(filter, true)
+    } catch (err) {
+      setError("Failed to delete asset.")
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const completionRate = useMemo(() => {
+    if (!stats || stats.totalAssets === 0) return 0
+    return Math.round((stats.completedAssets / stats.totalAssets) * 100)
+  }, [stats])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        <Navigation />
+        <div className="flex min-h-screen items-center justify-center px-6">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card/60 px-6 py-4 backdrop-blur-xl"
+          >
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <span className="text-sm text-muted-foreground">
+              Loading urban mining intelligence...
+            </span>
+          </motion.div>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-screen bg-background noise-overlay">
+    <div className="noise-overlay min-h-screen bg-background text-foreground">
       <Navigation />
 
-      {/* Hero Section */}
-      <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
-        {/* Background Grid */}
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:60px_60px]" />
-        
-        {/* Glow Effects */}
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-primary/3 rounded-full blur-3xl" />
+      <main className="relative z-10 mx-auto max-w-7xl px-4 pb-12 pt-24 sm:px-6 lg:px-8">
+        <motion.section
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45 }}
+          className="mb-8"
+        >
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-mono uppercase tracking-[0.25em] text-primary">
+                <Recycle className="h-3.5 w-3.5" />
+                Urban Mining Operations
+              </div>
 
-        <div className="relative mx-auto max-w-7xl">
-          {/* System Status Bar */}
-          <div className="flex flex-wrap items-center justify-center gap-6 mb-12 font-mono text-xs text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <span className="text-primary/70">STATUS:</span>
-              <span className="text-primary">OPERATIONAL</span>
-              <div className="w-2 h-2 rounded-full bg-primary pulse-glow" />
-            </div>
-            <div className="hidden sm:flex items-center gap-2">
-              <span className="text-primary/70">SECURITY:</span>
-              <span>MAXIMUM</span>
-            </div>
-            <div className="hidden md:flex items-center gap-2">
-              <span className="text-primary/70">SYS_TIME:</span>
-              <span className="tabular-nums">{isClient ? systemTime : "----"}</span>
-            </div>
-          </div>
+              <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+                Hardware recovery and precious metal extraction
+              </h1>
 
-          {/* Main Hero Content */}
-          <div className="text-center space-y-8">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border/50 bg-secondary/30 backdrop-blur-sm">
-              <Shield className="h-4 w-4 text-primary" />
-              <span className="font-mono text-xs tracking-wider">SOVEREIGN-GRADE SANITIZATION</span>
+              <p className="mt-3 max-w-2xl text-sm text-muted-foreground sm:text-base">
+                Monitor pickup logistics, sanitization, recovery progress, and
+                materials output from retired enterprise hardware.
+              </p>
             </div>
 
-            <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold tracking-tight text-balance">
-              <span className="block text-foreground">Data is</span>
-              <span className="block text-primary text-glow-subtle">Radioactive Matter</span>
-            </h1>
-
-            <p className="max-w-2xl mx-auto text-lg sm:text-xl text-muted-foreground leading-relaxed">
-              {isClient ? (
-                <TerminalText
-                  text="Making data recovery physically and digitally impossible. Solving the Digital Autopsy problem."
-                  speed={30}
-                  showCursor={false}
-                />
-              ) : (
-                "Making data recovery physically and digitally impossible. Solving the Digital Autopsy problem."
-              )}
-            </p>
-
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-              <Link href="/incinerator">
-                <Button size="lg" className="font-mono text-sm tracking-wider bg-primary hover:bg-primary/90 text-primary-foreground px-8 group">
-                  INITIATE GHOSTING
-                  <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+            <div className="flex flex-wrap items-center gap-3">
+              <motion.div whileHover={{ rotate: 90 }} transition={{ duration: 0.25 }}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => loadDashboard(filter, true)}
+                  disabled={refreshing}
+                  className="gap-2"
+                >
+                  <RefreshCw className={refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+                  Refresh
                 </Button>
-              </Link>
-              <Link href="/protocol">
-                <Button variant="outline" size="lg" className="font-mono text-sm tracking-wider border-border hover:bg-secondary px-8">
-                  VIEW PROTOCOL
+              </motion.div>
+
+              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
+                <Button
+                  onClick={handleCreateDemoAsset}
+                  disabled={creating}
+                  className="group gap-2"
+                >
+                  {creating ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Truck className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
+                  )}
+                  {creating ? "Creating..." : "Schedule Pickup"}
+                  <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
                 </Button>
-              </Link>
+              </motion.div>
             </div>
           </div>
+        </motion.section>
 
-          {/* Tech Specs Grid */}
-          <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-6">
-            <TechSpecCard
-              icon={Server}
-              title="VOLATILE SANDBOX"
-              description="RAM-Disk environment. Zero SSD contact. Power-cycle flush."
-              spec="INGRESS → RAM → GHOST → FLUSH"
-            />
-            <TechSpecCard
-              icon={Cpu}
-              title="TRIPLE-PASS ALGORITHM"
-              description="0x00 Zeroing → 0xFF Complementing → ISAAC PRNG Noise"
-              spec="NIST 800-88 COMPLIANT"
-            />
-            <TechSpecCard
-              icon={HardDrive}
-              title="METADATA SCRUBBING"
-              description="Inode structures, journals, slack space. Complete erasure."
-              spec="FORENSIC-RESISTANT"
-            />
-          </div>
-        </div>
-      </section>
+        <AnimatePresence>
+          {error ? (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="mb-6 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+            >
+              {error}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
-      {/* Services Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 border-t border-border/30">
-        <div className="mx-auto max-w-7xl">
-          <div className="text-center mb-16">
-            <h2 className="font-mono text-xs text-primary tracking-widest mb-4">SYSTEM MODULES</h2>
-            <p className="text-3xl sm:text-4xl font-bold">Complete Sanitization Ecosystem</p>
-          </div>
+        <section className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            {
+              title: "Total Assets",
+              value: stats?.totalAssets ?? 0,
+              icon: <Package className="h-5 w-5 text-primary" />,
+            },
+            {
+              title: "Completed Assets",
+              value: stats?.completedAssets ?? 0,
+              icon: <ShieldCheck className="h-5 w-5 text-primary" />,
+            },
+            {
+              title: "Gold Recovered",
+              value: `${stats?.goldRecovered ?? 0} oz`,
+              icon: <Recycle className="h-5 w-5 text-primary" />,
+            },
+            {
+              title: "Completion Rate",
+              value: `${completionRate}%`,
+              icon: <Activity className="h-5 w-5 text-primary" />,
+            },
+          ].map((card, index) => (
+            <motion.div
+              key={card.title}
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.06 }}
+              whileHover={{ y: -4 }}
+              className="rounded-2xl border border-border/50 bg-card/60 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] backdrop-blur-xl"
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">{card.title}</p>
+                <div className="rounded-xl border border-primary/20 bg-primary/10 p-2">
+                  {card.icon}
+                </div>
+              </div>
+              <p className="text-3xl font-bold tracking-tight">{card.value}</p>
+            </motion.div>
+          ))}
+        </section>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <ModuleCard
-              href="/incinerator"
-              title="DIGITAL INCINERATOR"
-              tag="MODULE A"
-              description="Drag-and-drop file destruction with real-time entropy visualization and terminal logging."
-              features={["RAM-Only Processing", "Entropy Visualization", "Sector Logging"]}
-              icon={Zap}
-            />
-            <ModuleCard
-              href="/urban-mining"
-              title="URBAN MINING HUB"
-              tag="MODULE B"
-              description="Physical hardware logistics with forensic sanitization and precious metal recovery."
-              features={["Asset Tracking", "Material Recovery", "Environmental Offset"]}
-              icon={Database}
-            />
-            <ModuleCard
-              href="/ledger"
-              title="FORENSIC ZERO LEDGER"
-              tag="MODULE C"
-              description="Blockchain-backed certificates of destruction with NIST-compliance timestamps."
-              features={["Unique Hash", "NIST Timestamp", "Immutable Record"]}
-              icon={Lock}
-            />
-          </div>
-        </div>
-      </section>
+        <section className="mb-8 flex flex-wrap gap-2">
+          {statusOptions.map((item) => {
+            const active = filter === item.value
 
-      {/* Stats Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 border-t border-border/30 bg-secondary/20">
-        <div className="mx-auto max-w-7xl">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
-            <StatCard value="100%" label="UNRECOVERABLE" />
-            <StatCard value="<1ms" label="RAM FLUSH TIME" />
-            <StatCard value="3-PASS" label="OVERWRITE CYCLES" />
-            <StatCard value="NIST" label="COMPLIANCE STANDARD" />
-          </div>
-        </div>
-      </section>
+            return (
+              <motion.button
+                key={item.value}
+                whileHover={{ y: -1 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setFilter(item.value)}
+                className={`rounded-full border px-4 py-2 text-sm transition-colors ${
+                  active
+                    ? "border-primary/30 bg-primary text-primary-foreground"
+                    : "border-border/50 bg-card/50 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                }`}
+              >
+                {item.label}
+              </motion.button>
+            )
+          })}
+        </section>
 
-      {/* CTA Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 border-t border-border/30">
-        <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl sm:text-4xl font-bold mb-6">
-            Ready to <span className="text-primary">Ghost</span> Your Data?
-          </h2>
-          <p className="text-muted-foreground mb-8 text-lg">
-            Join organizations that trust Ghost Protocol for sovereign-grade data destruction.
-          </p>
-          <Link href="/incinerator">
-            <Button size="lg" className="font-mono text-sm tracking-wider bg-primary hover:bg-primary/90 text-primary-foreground px-10 group">
-              ACCESS INCINERATOR
-              <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-            </Button>
-          </Link>
-        </div>
-      </section>
+        <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="rounded-2xl border border-border/50 bg-card/60 backdrop-blur-xl"
+          >
+            <div className="flex items-center justify-between border-b border-border/50 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-semibold">Asset Pipeline</h2>
+                <p className="text-sm text-muted-foreground">
+                  Live operational status across retired hardware inventory
+                </p>
+              </div>
 
-      {/* Footer */}
-      <footer className="py-12 px-4 sm:px-6 lg:px-8 border-t border-border/30">
-        <div className="mx-auto max-w-7xl">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-3">
-              <Shield className="h-6 w-6 text-primary" />
-              <span className="font-mono text-sm font-bold tracking-wider">GHOST PROTOCOL</span>
+              <div className="rounded-full border border-border/50 bg-secondary px-3 py-1 text-xs text-muted-foreground">
+                {assets.length} records
+              </div>
             </div>
-            <div className="font-mono text-xs text-muted-foreground text-center md:text-right">
-              <p>SANITIZATION-AS-A-SERVICE</p>
-              <p className="mt-1">DATA IS RADIOACTIVE MATTER</p>
+
+            <div className="divide-y divide-border/50">
+              <AnimatePresence mode="popLayout">
+                {assets.length > 0 ? (
+                  assets.map((asset, index) => (
+                    <motion.div
+                      key={asset.id}
+                      layout
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -12 }}
+                      transition={{ delay: index * 0.03 }}
+                      className="flex flex-col gap-4 px-5 py-4 md:flex-row md:items-center md:justify-between"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <div className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-secondary px-2.5 py-1 text-xs text-muted-foreground">
+                            {getTypeIcon(asset.type)}
+                            {asset.type}
+                          </div>
+
+                          <div
+                            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs ${getStatusClasses(
+                              asset.status
+                            )}`}
+                          >
+                            {statusLabelMap[asset.status] || asset.status}
+                          </div>
+                        </div>
+
+                        <h3 className="truncate text-base font-semibold">
+                          {asset.model}
+                        </h3>
+
+                        <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                          <span>{asset.serial}</span>
+                          <span className="inline-flex items-center gap-1">
+                            <MapPin className="h-3.5 w-3.5" />
+                            {asset.location}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                          >
+                            View
+                          </Button>
+                        </motion.div>
+
+                        <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }}>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDelete(asset.id)}
+                            disabled={deletingId === asset.id}
+                            className="gap-2"
+                          >
+                            {deletingId === asset.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                            Delete
+                          </Button>
+                        </motion.div>
+                      </div>
+                    </motion.div>
+                  ))
+                ) : (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="px-5 py-10 text-center"
+                  >
+                    <p className="text-sm text-muted-foreground">
+                      No assets found for the selected filter.
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          </div>
-        </div>
-      </footer>
-    </div>
-  )
-}
+          </motion.div>
 
-function TechSpecCard({
-  icon: Icon,
-  title,
-  description,
-  spec,
-}: {
-  icon: typeof Server
-  title: string
-  description: string
-  spec: string
-}) {
-  return (
-    <div className="group relative p-6 rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm hover:border-primary/30 transition-all">
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 rounded-xl transition-opacity" />
-      <div className="relative space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10 border border-primary/20">
-            <Icon className="h-5 w-5 text-primary" />
-          </div>
-          <h3 className="font-mono text-sm font-bold tracking-wider">{title}</h3>
-        </div>
-        <p className="text-sm text-muted-foreground leading-relaxed">{description}</p>
-        <div className="pt-2 border-t border-border/30">
-          <span className="font-mono text-xs text-primary/80">{spec}</span>
-        </div>
-      </div>
-    </div>
-  )
-}
+          <div className="space-y-6">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="rounded-2xl border border-border/50 bg-card/60 p-5 backdrop-blur-xl"
+            >
+              <h2 className="mb-4 text-lg font-semibold">Operational Breakdown</h2>
 
-function ModuleCard({
-  href,
-  title,
-  tag,
-  description,
-  features,
-  icon: Icon,
-}: {
-  href: string
-  title: string
-  tag: string
-  description: string
-  features: string[]
-  icon: typeof Zap
-}) {
-  return (
-    <Link href={href} className="group">
-      <div className="relative h-full p-8 rounded-xl border border-border/50 bg-card/30 backdrop-blur-sm hover:border-primary/50 transition-all duration-300">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 rounded-xl transition-opacity" />
-        <div className="relative space-y-6">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-xs text-primary/70 tracking-widest">{tag}</span>
-            <div className="p-2 rounded-lg bg-primary/10 border border-primary/20 group-hover:bg-primary/20 transition-colors">
-              <Icon className="h-5 w-5 text-primary" />
-            </div>
-          </div>
-          <div>
-            <h3 className="text-xl font-bold mb-2">{title}</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">{description}</p>
-          </div>
-          <ul className="space-y-2">
-            {features.map((feature, i) => (
-              <li key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
-                <div className="w-1.5 h-1.5 rounded-full bg-primary/60" />
-                {feature}
-              </li>
-            ))}
-          </ul>
-          <div className="flex items-center gap-2 text-primary font-mono text-sm group-hover:gap-3 transition-all">
-            ACCESS MODULE
-            <ArrowRight className="h-4 w-4" />
-          </div>
-        </div>
-      </div>
-    </Link>
-  )
-}
+              <div className="space-y-4">
+                {[
+                  {
+                    label: "Pending Pickup",
+                    value: stats?.pendingAssets ?? 0,
+                    color: "bg-zinc-500",
+                  },
+                  {
+                    label: "In Transit",
+                    value: stats?.inTransitAssets ?? 0,
+                    color: "bg-orange-500",
+                  },
+                  {
+                    label: "Sanitizing",
+                    value: stats?.sanitizingAssets ?? 0,
+                    color: "bg-yellow-500",
+                  },
+                  {
+                    label: "Recovering",
+                    value: stats?.recoveringAssets ?? 0,
+                    color: "bg-blue-500",
+                  },
+                  {
+                    label: "Complete",
+                    value: stats?.completedAssets ?? 0,
+                    color: "bg-emerald-500",
+                  },
+                ].map((item, index) => {
+                  const total = stats?.totalAssets || 1
+                  const width = Math.max((item.value / total) * 100, item.value > 0 ? 8 : 0)
 
-function StatCard({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="text-center p-6">
-      <div className="text-3xl sm:text-4xl font-bold text-primary text-glow-subtle mb-2">{value}</div>
-      <div className="font-mono text-xs text-muted-foreground tracking-wider">{label}</div>
+                  return (
+                    <div key={item.label}>
+                      <div className="mb-2 flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">{item.label}</span>
+                        <span className="font-medium text-foreground">{item.value}</span>
+                      </div>
+
+                      <div className="h-2 overflow-hidden rounded-full bg-secondary">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${width}%` }}
+                          transition={{ delay: 0.2 + index * 0.08, duration: 0.5 }}
+                          className={`h-full rounded-full ${item.color}`}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="rounded-2xl border border-border/50 bg-card/60 p-5 backdrop-blur-xl"
+            >
+              <h2 className="mb-4 text-lg font-semibold">Recovery Yield</h2>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-xl border border-border/50 bg-secondary/60 p-4">
+                  <p className="text-sm text-muted-foreground">Gold</p>
+                  <p className="mt-2 text-2xl font-bold text-primary">
+                    {stats?.goldRecovered ?? 0} oz
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-border/50 bg-secondary/60 p-4">
+                  <p className="text-sm text-muted-foreground">Assets Completed</p>
+                  <p className="mt-2 text-2xl font-bold">
+                    {stats?.completedAssets ?? 0}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-xl border border-primary/20 bg-primary/10 p-4">
+                <p className="text-sm text-primary">
+                  Recovery metrics update automatically when completed assets
+                  include material extraction data.
+                </p>
+              </div>
+            </motion.div>
+          </div>
+        </section>
+      </main>
     </div>
   )
 }
