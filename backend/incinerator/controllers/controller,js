@@ -1,0 +1,45 @@
+const File = require("../models/File");
+const fs = require("fs");
+
+// upload
+exports.uploadFile = async (req, res) => {
+  try {
+    const file = await File.create({
+      filename: req.file.filename,
+      size: req.file.size,
+    });
+
+    res.json(file);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// process (ghost simulation)
+exports.processFile = async (req, res) => {
+  try {
+    const file = await File.findById(req.params.id);
+
+    if (!file) return res.status(404).json({ msg: "File not found" });
+
+    file.status = "processing";
+    await file.save();
+
+    setTimeout(async () => {
+      file.status = "destroyed";
+      await file.save();
+
+      fs.unlink(`uploads/${file.filename}`, () => {});
+    }, 3000);
+
+    res.json({ msg: "Processing started" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// get all files
+exports.getFiles = async (req, res) => {
+  const files = await File.find();
+  res.json(files);
+};
