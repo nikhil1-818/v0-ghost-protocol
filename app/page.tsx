@@ -1,12 +1,15 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { AnimatePresence, motion } from "motion/react"
 import {
   Activity,
   ArrowRight,
+  Award,
+  CheckCircle2,
   Cpu,
   Database,
+  FileBadge2,
   Loader2,
   MapPin,
   Package,
@@ -15,11 +18,12 @@ import {
   ShieldCheck,
   Trash2,
   Truck,
+  X,
 } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
 import { Navigation } from "@/components/navigation"
-import { getAssets, createAsset, deleteAsset } from "@/lib/api/assets"
+import { Button } from "@/components/ui/button"
+import { createAsset, deleteAsset, getAssets } from "@/lib/api/assets"
 import { getStats } from "@/lib/api/stats"
 
 type Asset = {
@@ -104,6 +108,280 @@ function getTypeIcon(type: Asset["type"]) {
   }
 }
 
+function formatDate(date?: string | null) {
+  if (!date) return "—"
+  return new Date(date).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  })
+}
+
+function CertificateModal({
+  asset,
+  open,
+  onClose,
+}: {
+  asset: Asset | null
+  open: boolean
+  onClose: () => void
+}) {
+  if (!asset) return null
+
+  const materials = asset.materials || {
+    gold: 0.34,
+    silver: 2.1,
+    palladium: 0.12,
+    copper: 145,
+  }
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-md"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 24, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 18, scale: 0.98 }}
+            transition={{ duration: 0.28 }}
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl border border-border/50 bg-card/95 shadow-2xl"
+          >
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border/50 bg-card/90 px-6 py-4 backdrop-blur-xl">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl border border-primary/20 bg-primary/10 p-2">
+                  <FileBadge2 className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold">Recovery Certificate</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Asset disposition and material extraction record
+                  </p>
+                </div>
+              </div>
+
+              <motion.button
+                whileHover={{ rotate: 90, scale: 1.05 }}
+                whileTap={{ scale: 0.92 }}
+                onClick={onClose}
+                className="rounded-xl border border-border/50 bg-secondary p-2 text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </motion.button>
+            </div>
+
+            <div className="p-6">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-card via-card to-primary/5"
+              >
+                <div className="border-b border-border/50 px-6 py-6">
+                  <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-mono uppercase tracking-[0.25em] text-primary">
+                        <Award className="h-3.5 w-3.5" />
+                        Certified Recovery
+                      </div>
+
+                      <h3 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                        Certificate of Responsible IT Asset Recovery
+                      </h3>
+
+                      <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                        This certifies that the listed enterprise asset has been
+                        processed through secure collection, forensic sanitization,
+                        and recovery operations under the Urban Mining Hub workflow.
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-right">
+                      <p className="text-xs uppercase tracking-[0.2em] text-primary/80">
+                        Certificate ID
+                      </p>
+                      <p className="mt-1 font-mono text-sm text-primary">
+                        CERT-{asset.serial}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-6 px-6 py-6 lg:grid-cols-[1.15fr_0.85fr]">
+                  <div className="space-y-6">
+                    <div className="rounded-2xl border border-border/50 bg-secondary/40 p-5">
+                      <div className="mb-4 flex items-center gap-2">
+                        <ShieldCheck className="h-4 w-4 text-primary" />
+                        <h4 className="text-base font-semibold">Asset Details</h4>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                            Equipment Model
+                          </p>
+                          <p className="mt-1 text-sm font-medium">{asset.model}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                            Asset Type
+                          </p>
+                          <p className="mt-1 text-sm font-medium capitalize">
+                            {asset.type}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                            Serial Number
+                          </p>
+                          <p className="mt-1 font-mono text-sm">{asset.serial}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                            Recovery Status
+                          </p>
+                          <p className="mt-1 text-sm font-medium">
+                            {statusLabelMap[asset.status] || asset.status}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                            Pickup Date
+                          </p>
+                          <p className="mt-1 text-sm font-medium">
+                            {formatDate(asset.pickupDate)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                            Completed Date
+                          </p>
+                          <p className="mt-1 text-sm font-medium">
+                            {formatDate(asset.completedDate || new Date().toISOString())}
+                          </p>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                            Processing Facility
+                          </p>
+                          <p className="mt-1 text-sm font-medium">
+                            Urban Mining Hub Secure Recovery Center, {asset.location}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-border/50 bg-secondary/40 p-5">
+                      <div className="mb-4 flex items-center gap-2">
+                        <Recycle className="h-4 w-4 text-primary" />
+                        <h4 className="text-base font-semibold">Recovered Materials</h4>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="rounded-xl border border-primary/15 bg-primary/10 p-4">
+                          <p className="text-xs uppercase tracking-[0.14em] text-primary/80">
+                            Gold
+                          </p>
+                          <p className="mt-2 text-2xl font-bold text-primary">
+                            {materials.gold ?? 0} oz
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-border/50 bg-card/70 p-4">
+                          <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                            Silver
+                          </p>
+                          <p className="mt-2 text-2xl font-bold">
+                            {materials.silver ?? 0} oz
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-border/50 bg-card/70 p-4">
+                          <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                            Palladium
+                          </p>
+                          <p className="mt-2 text-2xl font-bold">
+                            {materials.palladium ?? 0} oz
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-border/50 bg-card/70 p-4">
+                          <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                            Copper
+                          </p>
+                          <p className="mt-2 text-2xl font-bold">
+                            {materials.copper ?? 0} g
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div className="rounded-2xl border border-border/50 bg-secondary/40 p-5">
+                      <div className="mb-4 flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-primary" />
+                        <h4 className="text-base font-semibold">Compliance Summary</h4>
+                      </div>
+
+                      <div className="space-y-3">
+                        {[
+                          "Chain-of-custody verified",
+                          "Forensic sanitization completed",
+                          "Material recovery documented",
+                          "Disposition workflow archived",
+                        ].map((item) => (
+                          <div
+                            key={item}
+                            className="flex items-center gap-3 rounded-xl border border-border/50 bg-card/60 px-4 py-3"
+                          >
+                            <div className="rounded-full bg-primary/15 p-1.5">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                            </div>
+                            <p className="text-sm">{item}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-primary/20 bg-primary/10 p-5">
+                      <p className="text-xs uppercase tracking-[0.16em] text-primary/80">
+                        Authorized By
+                      </p>
+                      <p className="mt-2 text-lg font-semibold">Urban Mining Hub</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Secure Asset Recovery & Precious Material Reclamation Unit
+                      </p>
+
+                      <div className="mt-6 border-t border-primary/15 pt-4">
+                        <p className="font-mono text-sm text-primary">
+                          Digitally validated for audit reference
+                        </p>
+                      </div>
+                    </div>
+
+                    <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}>
+                      <Button className="w-full gap-2">
+                        <FileBadge2 className="h-4 w-4" />
+                        Download Certificate
+                      </Button>
+                    </motion.div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 export default function UrbanMiningPage() {
   const [assets, setAssets] = useState<Asset[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
@@ -113,6 +391,7 @@ export default function UrbanMiningPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState("")
   const [filter, setFilter] = useState("all")
+  const [selectedCertificateAsset, setSelectedCertificateAsset] = useState<Asset | null>(null)
 
   async function loadDashboard(selectedFilter = filter, showRefresh = false) {
     try {
@@ -130,7 +409,7 @@ export default function UrbanMiningPage() {
 
       setAssets(assetsData)
       setStats(statsData)
-    } catch (err) {
+    } catch {
       setError("Failed to load dashboard data.")
     } finally {
       setLoading(false)
@@ -139,11 +418,13 @@ export default function UrbanMiningPage() {
   }
 
   useEffect(() => {
-    loadDashboard()
+    loadDashboard("all", false)
   }, [])
 
   useEffect(() => {
-    loadDashboard(filter, true)
+    if (!loading) {
+      loadDashboard(filter, true)
+    }
   }, [filter])
 
   async function handleCreateDemoAsset() {
@@ -161,7 +442,7 @@ export default function UrbanMiningPage() {
       })
 
       await loadDashboard(filter, true)
-    } catch (err) {
+    } catch {
       setError("Failed to create asset.")
     } finally {
       setCreating(false)
@@ -173,7 +454,7 @@ export default function UrbanMiningPage() {
       setDeletingId(id)
       await deleteAsset(id)
       await loadDashboard(filter, true)
-    } catch (err) {
+    } catch {
       setError("Failed to delete asset.")
     } finally {
       setDeletingId(null)
@@ -208,6 +489,12 @@ export default function UrbanMiningPage() {
   return (
     <div className="noise-overlay min-h-screen bg-background text-foreground">
       <Navigation />
+
+      <CertificateModal
+        asset={selectedCertificateAsset}
+        open={!!selectedCertificateAsset}
+        onClose={() => setSelectedCertificateAsset(null)}
+      />
 
       <main className="relative z-10 mx-auto max-w-7xl px-4 pb-12 pt-24 sm:px-6 lg:px-8">
         <motion.section
@@ -405,14 +692,16 @@ export default function UrbanMiningPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }}>
                           <Button
                             variant="outline"
                             size="sm"
                             className="gap-2"
+                            onClick={() => setSelectedCertificateAsset(asset)}
                           >
-                            View
+                            <FileBadge2 className="h-4 w-4" />
+                            View Certificate
                           </Button>
                         </motion.div>
 
