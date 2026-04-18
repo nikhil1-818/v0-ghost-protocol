@@ -1,0 +1,67 @@
+import { NextResponse } from "next/server"
+import { prisma } from "@/lib/prisma"
+
+export async function GET(request) {
+  try {
+    const searchParams = request.nextUrl.searchParams
+    const status = searchParams.get("status")
+
+    const assets = await prisma.asset.findMany({
+      where: status && status !== "all" ? { status } : {},
+      orderBy: { createdAt: "desc" },
+    })
+
+    return NextResponse.json(assets, { status: 200 })
+  } catch (error) {
+    console.error("GET /api/assets error:", error)
+    return NextResponse.json(
+      { message: "Failed to fetch assets" },
+      { status: 500 }
+    )
+  }
+}
+
+export async function POST(request) {
+  try {
+    const body = await request.json()
+
+    const {
+      type,
+      model,
+      serial,
+      location,
+      status,
+      pickupDate,
+      completedDate,
+      materials,
+    } = body
+
+    if (!type || !model || !serial || !location) {
+      return NextResponse.json(
+        { message: "type, model, serial and location are required" },
+        { status: 400 }
+      )
+    }
+
+    const asset = await prisma.asset.create({
+      data: {
+        type,
+        model,
+        serial,
+        location,
+        status: status || "pending_pickup",
+        pickupDate: pickupDate || null,
+        completedDate: completedDate || null,
+        materials: materials || null,
+      },
+    })
+
+    return NextResponse.json(asset, { status: 201 })
+  } catch (error) {
+    console.error("POST /api/assets error:", error)
+    return NextResponse.json(
+      { message: "Failed to create asset" },
+      { status: 500 }
+    )
+  }
+}
