@@ -1,13 +1,3 @@
-#ghost-protocol-platform
-
-This is a [Next.js](https://nextjs.org) project bootstrapped with [v0](https://v0.app).
-
-
-
-
-
-[Continue working on v0 →](https://v0.app/chat/projects/prj_8ecpTPch1Kxn994UvqU8GbB6xS3W)
-
 ## Getting Started
 
 First, run the development server:
